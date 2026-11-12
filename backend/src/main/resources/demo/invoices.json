@@ -1,0 +1,28 @@
+{
+  "invoices": [
+    {
+      "id": "inv-1201",
+      "label": "Design retainer",
+      "payeeEmail": "alice@example.com",
+      "amountMinor": 1200,
+      "currency": "USD",
+      "memo": "Invoice inv-1201: design retainer"
+    },
+    {
+      "id": "inv-1502",
+      "label": "Weekly research",
+      "payeeEmail": "alice@example.com",
+      "amountMinor": 15000,
+      "currency": "USD",
+      "memo": "Invoice inv-1502: weekly research"
+    },
+    {
+      "id": "inv-9003",
+      "label": "Unknown vendor",
+      "payeeEmail": "mallory@example.com",
+      "amountMinor": 90000,
+      "currency": "USD",
+      "memo": "Invoice inv-9003: unknown vendor"
+    }
+  ]
+}

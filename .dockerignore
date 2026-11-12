@@ -1,0 +1,11 @@
+# Build context is the repository root. Keep images small and secrets out.
+**/target
+**/node_modules
+frontend/dist
+.git
+.gstack
+.idea
+.env
+.env.*
+!.env.example
+*.log
