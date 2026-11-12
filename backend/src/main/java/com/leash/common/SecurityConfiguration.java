@@ -78,7 +78,6 @@ class SecurityConfiguration {
       AdminProperties adminProperties)
       throws Exception {
     DaoAuthenticationProvider provider = new DaoAuthenticationProvider(adminUserDetailsService);
-    System.out.println("ADMIN HASH: " + adminProperties.passwordHash());
     provider.setPasswordEncoder(passwordEncoder);
 
     // Disable rate limiting when using the test admin password (admin-test-password)
