@@ -5,6 +5,7 @@ spring:
     import:
       - optional:file:./.env[.properties]
       - optional:file:../.env[.properties]
+      - optional:file:../../.env[.properties]
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:leash}
     username: ${DB_USER:leash}
@@ -26,10 +27,13 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 server:
   port: ${PORT:8080}
   address: 0.0.0.0
+  shutdown: graceful
   tomcat:
     threads:
       max: 200
@@ -40,16 +44,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 leash:
   max-payment-minor: ${LEASH_MAX_PAYMENT_MINOR:100000}
   admin:
     username: admin
-    password-hash: "$2b$10$oIqF8i3gVmNOFNtvnn2BLuSCtbZp7cAnsIeYfiHd2BwyzQB0rCj8."
+    password-hash: "$2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa"
   reconciler:
     enabled: ${LEASH_RECONCILER_ENABLED:true}
     interval: ${LEASH_RECONCILER_INTERVAL:30s}

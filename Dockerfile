@@ -12,18 +12,22 @@ COPY frontend/ ./
 RUN VITE_API_BASE_URL=${VITE_API_BASE_URL} npm run build
 
 # 2. Build the Spring Boot jar with the console baked into static resources.
+# The Maven reactor contains leash-core (framework-free library) and leash-backend (service).
 FROM eclipse-temurin:21-jdk AS backend
 WORKDIR /app/backend
 COPY backend/.mvn/ .mvn/
 COPY backend/mvnw backend/pom.xml ./
+COPY backend/leash-core/pom.xml ./leash-core/pom.xml
+COPY backend/leash-backend/pom.xml ./leash-backend/pom.xml
 # A transient failure here is usually the wrapper downloading the Maven distribution.
 # Retry twice before failing the build; the layers above stay cached.
 RUN chmod +x mvnw \
     && (./mvnw -B -q -DskipTests dependency:go-offline \
         || (echo "Maven download failed; retrying in 5s" && sleep 5 && ./mvnw -B -q -DskipTests dependency:go-offline) \
         || (echo "Maven download failed again; retrying in 15s" && sleep 15 && ./mvnw -B -q -DskipTests dependency:go-offline))
-COPY backend/src ./src
-COPY --from=frontend /app/frontend/dist ./src/main/resources/static
+COPY backend/leash-core/src ./leash-core/src
+COPY backend/leash-backend/src ./leash-backend/src
+COPY --from=frontend /app/frontend/dist ./leash-backend/src/main/resources/static
 RUN ./mvnw -B -DskipTests package
 
 # 3. Runtime: JRE only, non-root, no Maven and no Node.
@@ -31,7 +35,7 @@ FROM eclipse-temurin:21-jre
 RUN groupadd --system --gid 1001 leash \
     && useradd --system --uid 1001 --gid leash --no-create-home leash
 WORKDIR /app
-COPY --from=backend /app/backend/target/leash-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=backend /app/backend/leash-backend/target/leash-backend-1.0.0-SNAPSHOT.jar app.jar
 USER leash
 EXPOSE 8080
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

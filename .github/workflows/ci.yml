@@ -26,6 +26,13 @@ jobs:
       - name: Verify
         run: ./mvnw -B verify
 
+      - name: Core purity (no Spring or JPA imports)
+        run: |
+          if grep -RE "import (org\.springframework|jakarta\.)" leash-core/src/main; then
+            echo "leash-core must stay framework-free"
+            exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

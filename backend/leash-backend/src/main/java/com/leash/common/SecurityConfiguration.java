@@ -126,6 +126,11 @@ class SecurityConfiguration {
             authorization
                 .requestMatchers("/webhooks/paypal", "/actuator/health", "/actuator/info")
                 .permitAll()
+                // Prometheus scrapes are unauthenticated on the demo deployment; restrict this
+                // route at the proxy if metrics must stay private.
+                .requestMatchers(
+                    "/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                .permitAll()
                 // The production image serves the built console from the jar. These paths are
                 // static assets only; every API route below still requires authentication.
                 .requestMatchers("/", "/index.html", "/favicon.svg", "/assets/**")

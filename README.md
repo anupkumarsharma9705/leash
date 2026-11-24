@@ -144,10 +144,10 @@ cd backend
 
 # Windows PowerShell
 $env:SPRING_PROFILES_ACTIVE='local,demo'
-.\mvnw.cmd spring-boot:run
+.\mvnw.cmd -pl leash-backend spring-boot:run
 
 # macOS / Linux
-SPRING_PROFILES_ACTIVE=local,demo ./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=local,demo ./mvnw -pl leash-backend spring-boot:run
 ```
 
 `local` is the normal profile; `demo` adds the demo agent, demo runner routes, and the bundled
