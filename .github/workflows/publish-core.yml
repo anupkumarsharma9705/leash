@@ -29,7 +29,8 @@ jobs:
           server-password: GITHUB_TOKEN
 
       - name: Make Maven wrapper executable
-        run: chmod +x backend/mvnw
+        run: chmod +x mvnw
+        working-directory: backend
 
       - name: Verify before publishing
         run: ./mvnw -B -pl leash-core -am verify
