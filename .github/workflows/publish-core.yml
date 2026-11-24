@@ -36,6 +36,6 @@ jobs:
         run: ./mvnw -B -pl leash-core -am verify
 
       - name: Publish to GitHub Packages
-        run: ./mvnw -B -pl leash-core -am deploy -DskipTests
+        run: ./mvnw -B -pl leash-core deploy -DskipTests
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
