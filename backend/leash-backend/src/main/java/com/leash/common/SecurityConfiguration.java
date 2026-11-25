@@ -124,7 +124,11 @@ class SecurityConfiguration {
                 "/webhooks/paypal", "/api/v1/payments", "/api/v1/payments/**", "/api/v1/budget"))
         .authorizeHttpRequests(authorization ->
             authorization
-                .requestMatchers("/webhooks/paypal", "/actuator/health", "/actuator/health/readiness", "/actuator/info")
+                .requestMatchers(
+                    "/webhooks/paypal",
+                    "/actuator/health",
+                    "/actuator/health/readiness",
+                    "/actuator/info")
                 .permitAll()
                 // Prometheus scrapes are unauthenticated on the demo deployment; restrict this
                 // route at the proxy if metrics must stay private.
