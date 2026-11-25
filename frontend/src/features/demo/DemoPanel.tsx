@@ -150,7 +150,7 @@ function Runner({
       <header className="panel__header">
         <div>
           <h2 className="panel__title" id="demo-runner-title">
-            Scripted agent
+            Demo agent
           </h2>
           <p className="panel__subtitle">
             The agent calls only the public API with its own key, exactly like an
@@ -196,7 +196,7 @@ function Runner({
               <small>
                 {llmAvailable
                   ? 'The model chooses tools; policy still decides.'
-                  : 'Not configured in this build. Scripted mode stays available.'}
+                  : 'No model endpoint is configured. Scripted mode stays available.'}
               </small>
             </span>
           </label>

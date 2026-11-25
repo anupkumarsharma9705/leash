@@ -9,9 +9,11 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Administrative credentials.
  *
- * <p>There is deliberately no default: the application refuses to start unless both values are
- * supplied. Only a BCrypt hash is accepted for the password, so the plaintext password never lives
- * in configuration or logs.
+ * <p>There is deliberately no working default: the application refuses to start unless both values
+ * are supplied through {@code LEASH_ADMIN_USERNAME} and {@code LEASH_ADMIN_PASSWORD_HASH}. The
+ * legacy {@code ADMIN_*} names are still accepted for existing local {@code .env} files. Only a
+ * BCrypt hash is accepted for the password, so the plaintext password never lives in configuration
+ * or logs.
  */
 @Validated
 @ConfigurationProperties(prefix = "leash.admin")
@@ -30,7 +32,7 @@ public record AdminProperties(
         && !passwordHash.isBlank()
         && !BCRYPT_HASH.matcher(passwordHash).matches()) {
       throw new IllegalArgumentException(
-          "leash.admin.password-hash must be a BCrypt hash (ADMIN_PASSWORD_HASH)");
+          "leash.admin.password-hash must be a BCrypt hash (LEASH_ADMIN_PASSWORD_HASH)");
     }
   }
 }

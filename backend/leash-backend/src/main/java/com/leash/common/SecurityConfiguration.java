@@ -8,11 +8,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -75,17 +74,11 @@ class SecurityConfiguration {
       UserDetailsService adminUserDetailsService,
       PasswordEncoder passwordEncoder,
       ObjectMapper objectMapper,
-      AdminProperties adminProperties)
+      AdminRateLimitProperties rateLimitProperties,
+      Clock clock)
       throws Exception {
     DaoAuthenticationProvider provider = new DaoAuthenticationProvider(adminUserDetailsService);
     provider.setPasswordEncoder(passwordEncoder);
-
-    // Disable rate limiting when using the test admin password (admin-test-password)
-    // The test password hash is $2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa
-    String testPasswordHash = "$2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa";
-    boolean isTestEnvironment = testPasswordHash.equals(adminProperties.passwordHash());
-    AdminRateLimitFilter rateLimitFilter =
-        isTestEnvironment ? null : new AdminRateLimitFilter(objectMapper);
 
     // Use standard SPA CSRF config (SameSite=Lax, httpOnly=false).
     // For cross-subdomain deployments (e.g., app.example.com → api.example.com),
@@ -96,8 +89,10 @@ class SecurityConfiguration {
         .csrf(csrf -> csrf.spa())
         .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
 
-    if (rateLimitFilter != null) {
-      http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
+    if (rateLimitProperties.enabled()) {
+      http.addFilterBefore(
+          new AdminRateLimitFilter(objectMapper, clock),
+          UsernamePasswordAuthenticationFilter.class);
     }
 
     http.authenticationProvider(provider)
@@ -203,86 +198,6 @@ class SecurityConfiguration {
           HttpStatus.UNAUTHORIZED,
           "UNAUTHORIZED",
           "Admin authentication is required");
-    }
-  }
-
-  /**
-   * Rate limiter for admin authentication attempts.
-   *
-   * <p>Tracks failed HTTP Basic authentication attempts per IP address. After 5 failed attempts
-   * within a 15-minute window, subsequent requests from that IP receive 429 (Too Many Requests)
-   * until the window expires. This mitigates brute-force attacks against the single admin account.
-   */
-  private static final class AdminRateLimitFilter extends OncePerRequestFilter {
-
-    private static final int MAX_ATTEMPTS = 5;
-    private static final long WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
-    private final ObjectMapper objectMapper;
-    private final Map<String, AttemptRecord> attempts = new ConcurrentHashMap<>();
-
-    private AdminRateLimitFilter(ObjectMapper objectMapper) {
-      this.objectMapper = objectMapper;
-    }
-
-    @Override
-    protected void doFilterInternal(
-        HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-        throws ServletException, IOException {
-      String ip = request.getRemoteAddr();
-      AttemptRecord record = attempts.get(ip);
-      Instant now = Instant.now();
-
-      if (record != null && record.isLockedOut(now)) {
-        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        Map<String, Object> problem = new LinkedHashMap<>();
-        problem.put("type", "about:blank");
-        problem.put("title", "Too Many Requests");
-        problem.put("status", HttpStatus.TOO_MANY_REQUESTS.value());
-        problem.put("detail", "Too many failed login attempts. Try again later.");
-        problem.put("instance", request.getRequestURI());
-        problem.put("code", "RATE_LIMITED");
-        problem.put("correlationId", UUID.randomUUID().toString());
-        objectMapper.writeValue(response.getOutputStream(), problem);
-        return;
-      }
-
-      filterChain.doFilter(request, response);
-
-      // Check if this was a failed authentication (401 response)
-      if (response.getStatus() == HttpStatus.UNAUTHORIZED.value()) {
-        AttemptRecord newRecord = record == null ? new AttemptRecord() : record;
-        newRecord.addAttempt(now);
-        attempts.put(ip, newRecord);
-      } else if (response.getStatus() == HttpStatus.OK.value()) {
-        // Successful auth - clear the record for this IP
-        attempts.remove(ip);
-      }
-    }
-
-    private static class AttemptRecord {
-      private final Instant[] attempts = new Instant[MAX_ATTEMPTS];
-      private int count = 0;
-
-      void addAttempt(Instant now) {
-        if (count < MAX_ATTEMPTS) {
-          attempts[count++] = now;
-        } else {
-          // Shift and add new
-          System.arraycopy(attempts, 1, attempts, 0, MAX_ATTEMPTS - 1);
-          attempts[MAX_ATTEMPTS - 1] = now;
-        }
-      }
-
-      boolean isLockedOut(Instant now) {
-        if (count < MAX_ATTEMPTS) {
-          return false;
-        }
-        // Check if the oldest attempt is still within the window
-        return now.minusMillis(WINDOW_MS).isBefore(attempts[0]);
-      }
     }
   }
 

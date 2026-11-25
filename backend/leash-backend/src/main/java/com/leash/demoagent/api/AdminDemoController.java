@@ -6,6 +6,7 @@ import com.leash.demoagent.DemoAgentRunner;
 import com.leash.demoagent.DemoInvoiceLoader;
 import com.leash.demoagent.DemoMode;
 import com.leash.demoagent.DemoRunResult;
+import com.leash.demoagent.LlmDemoAgent;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
@@ -30,12 +31,17 @@ class AdminDemoController {
   private final DemoAgentRunner runner;
   private final DemoAgentCredentials credentials;
   private final DemoInvoiceLoader invoices;
+  private final LlmDemoAgent llmAgent;
 
   AdminDemoController(
-      DemoAgentRunner runner, DemoAgentCredentials credentials, DemoInvoiceLoader invoices) {
+      DemoAgentRunner runner,
+      DemoAgentCredentials credentials,
+      DemoInvoiceLoader invoices,
+      LlmDemoAgent llmAgent) {
     this.runner = runner;
     this.credentials = credentials;
     this.invoices = invoices;
+    this.llmAgent = llmAgent;
   }
 
   @GetMapping("/status")
@@ -49,7 +55,7 @@ class AdminDemoController {
         agentId,
         agentName,
         invoices.invoices().size(),
-        false,
+        llmAgent.isConfigured(),
         List.of(DemoMode.SCRIPTED, DemoMode.LLM));
   }
 

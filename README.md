@@ -83,6 +83,7 @@ Every invoice reuses a stable `invoice-<id>` idempotency key, so a second run re
 payments and creates no second payout. Run it from the console's **Demo** section or:
 
 ```bash
+# Use the admin username/password you set in .env (the local example is admin / admin-test-password).
 curl -u admin:admin-test-password -c cookies.txt \
   http://localhost:8080/api/v1/admin/demo/status
 XSRF=$(awk '/XSRF-TOKEN/ {print $7}' cookies.txt)
@@ -91,7 +92,8 @@ curl -u admin:admin-test-password -b cookies.txt \
   'http://localhost:8080/api/v1/admin/demo/run?mode=SCRIPTED'
 ```
 
-`LLM` mode is advertised but wired to fail closed with `501 LLM_NOT_CONFIGURED` in this build; see
+`LLM` mode is available when `LEASH_LLM_BASE_URL`, `LEASH_LLM_API_KEY`, and `LEASH_LLM_MODEL`
+are all set; without them it fails closed with `501 LLM_NOT_CONFIGURED`. See
 [§10](#10-ai-model). The runner never calls a model in `SCRIPTED` mode.
 
 ## 4. Run from source
@@ -127,8 +129,9 @@ PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
 PAYPAL_WEBHOOK_ID=
 
 # Local admin credential. Hash below is BCrypt for "admin-test-password".
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=$2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa
+# New deployments should use the LEASH_ADMIN_* names; ADMIN_* is still accepted for compatibility.
+LEASH_ADMIN_USERNAME=admin
+LEASH_ADMIN_PASSWORD_HASH=$2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa
 
 # Keep false while there are no PayPal credentials; enable for real sandbox runs.
 LEASH_RECONCILER_ENABLED=false
@@ -136,6 +139,8 @@ LEASH_RECONCILER_ENABLED=false
 
 `.env` is git-ignored. Never commit a real credential. Generate a different BCrypt hash for any
 shared deployment; the hash above is a documented local test credential, not a production secret.
+Startup fails when the username or hash is blank, so a forgotten environment variable cannot silently
+fall back to a public password.
 
 ### 4.3 Start the backend
 
@@ -177,8 +182,10 @@ Use the local test credential:
 | Username | `admin` |
 | Password | `admin-test-password` |
 
-The credential lives in module memory only; reloading the page signs the operator out. This is
-deliberate for a sandbox console.
+This credential is for the local, seeded database only. Any shared or hosted deployment must set its
+own `LEASH_ADMIN_USERNAME` and `LEASH_ADMIN_PASSWORD_HASH`; the documented value is not a hosted
+credential. The credential lives in module memory only; reloading the page signs the operator out.
+This is deliberate for a sandbox console.
 
 1. **Ledger** shows every payment, newest first. Click a row for its append-only timeline.
 2. **Demo → Run the demo** executes the three invoices. Expect one approval, one escalation, one
@@ -259,8 +266,9 @@ simulation of a successful payout.
 | `SPRING_PROFILES_ACTIVE` | `local` | Use `local,demo` for the demo runner |
 | `PORT` | `8080` | HTTP port |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | compose defaults | PostgreSQL connection |
-| `ADMIN_USERNAME` | — (required) | Admin username; startup fails if blank |
-| `ADMIN_PASSWORD_HASH` | — (required) | BCrypt hash only; startup fails if not a valid hash |
+| `LEASH_ADMIN_USERNAME` | — (required) | Admin username; startup fails if blank. Legacy `ADMIN_USERNAME` still binds |
+| `LEASH_ADMIN_PASSWORD_HASH` | — (required) | BCrypt hash only; startup fails if not a valid hash. Legacy `ADMIN_PASSWORD_HASH` still binds |
+| `LEASH_ADMIN_RATE_LIMIT_ENABLED` | `true` | Per-IP failed-login limiter (5 failures / 15 min). Tests disable it explicitly |
 | `LEASH_MAX_PAYMENT_MINOR` | `100000` | Hard per-payment cap ($1,000.00) |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | blank | Sandbox OAuth credentials |
 | `PAYPAL_BASE_URL` | `https://api-m.sandbox.paypal.com` | Must be a sandbox host unless `LEASH_ALLOW_LIVE=true` |
@@ -272,10 +280,15 @@ simulation of a successful payout.
 | `LEASH_DEMO_WEEKLY_LIMIT_MINOR` | `200000` | Demo weekly limit ($2,000.00) |
 | `LEASH_DEMO_AUTO_APPROVE_THRESHOLD_MINOR` | `5000` | Demo threshold ($50.00) |
 | `LEASH_DEMO_ALLOWED_PAYEE` | `alice@example.com` | Demo allow-list |
+| `LEASH_LLM_BASE_URL` | blank | OpenAI-compatible base URL; blank disables LLM mode |
+| `LEASH_LLM_API_KEY` | blank | Provider key; never sent to the demo agent or logged |
+| `LEASH_LLM_MODEL` | blank | Provider model id |
+| `LEASH_LLM_TIMEOUT` | `30s` | Connect/read timeout for one model turn |
+| `LEASH_LLM_MAX_ITERATIONS` | `8` | Maximum model turns per demo run (1–16) |
+| `LEASH_LLM_TEMPERATURE` | `0.0` | Sampling temperature (0–2) |
 
-The `LEASH_LLM_*` placeholders in `.env.example` are reserved for the unimplemented LLM mode; setting
-them does not enable it. Money is integer minor units end to end. The only decimal conversion happens at the PayPal adapter
-boundary.
+LLM mode is enabled only when the base URL, API key, and model are all non-blank. Money is integer
+minor units end to end; the only decimal conversion happens at the PayPal adapter boundary.
 
 ## 8. What is new since October 1, 2026
 
@@ -308,14 +321,31 @@ React 19, TypeScript 7 strict, Vite 8, TanStack Query 5, AG Grid 36.
 
 ## 10. AI model
 
-**No LLM provider or model is called in this build.** The demo agent runs in `SCRIPTED` mode, which
-makes deterministic tool calls in invoice order and is the safety net for the demo. `LLM` mode is
-listed in the demo status response but disabled in the console; a direct call returns
-`501 LLM_NOT_CONFIGURED`. This is intentional: the policy engine, not a model, owns every decision,
-and the project boots and passes its tests with no model key present.
+The demo has two modes:
 
-Adding a model later is a port-level change: the agent must still call Leash over HTTP with its own
-key, and model output remains untrusted input that cannot bypass policy or read PayPal credentials.
+- **`SCRIPTED`** is the default and the safety net for the video. It makes deterministic tool calls in
+  invoice order and calls no model.
+- **`LLM`** uses an OpenAI-compatible chat-completions endpoint with tool calling. The model may
+  choose only `check_budget` and `pay_invoice`; it passes an `invoiceId`, and Leash resolves the
+  payee, amount, and currency from the bundled invoice file. Leash, not the model, makes every
+  policy decision.
+
+Enable it by setting all three values:
+
+```properties
+LEASH_LLM_BASE_URL=https://api.deepseek.com
+LEASH_LLM_API_KEY=<your key>
+LEASH_LLM_MODEL=deepseek-chat
+```
+
+OpenAI's endpoint is `https://api.openai.com/v1`; the model id is whatever the provider publishes.
+The exact runtime provider and model are the values in `LEASH_LLM_BASE_URL` and `LEASH_LLM_MODEL`.
+This repository ships no key, and the test suite runs with no key present.
+
+The build itself was produced with **DeepSeek V4.1 Flash via OpenCode**. That is the coding model,
+not a hardcoded runtime dependency: the demo agent calls whatever OpenAI-compatible provider the
+deployment configures. The trust boundary is unchanged: the model never receives PayPal
+credentials, never calls PayPal, and its output cannot bypass policy.
 
 ## 11. Verification
 
@@ -348,8 +378,8 @@ Leash is a hackathon sandbox control plane, **not production-ready**:
   non-sandbox base URL.
 - USD only; one payout item per payment request.
 - Single-tenant. No organizations, teams, SSO, MFA, or per-operator roles.
-- No rate limiting, abuse detection, or external notification channel. The approval queue lives in
-  the dashboard.
+- No general API rate limiting or abuse detection; the admin login has a per-IP failed-attempt
+  limiter. The approval queue lives in the dashboard.
 - No data-retention or archival policy. The ledger is append-only by design, so a reset requires a
   schema drop in a local database.
 - The admin credential is one in-memory user; the console keeps it in module memory and a reload
@@ -357,7 +387,8 @@ Leash is a hackathon sandbox control plane, **not production-ready**:
 - The reconciler is a single scheduled loop. Database row locks protect decisions across instances,
   but the scheduler is not coordinated for horizontal scaling.
 - The frontend ships AG Grid in one ~1.5 MB bundle; it is an operator console, not a public site.
-- LLM tool calling is not implemented in this build; `SCRIPTED` mode is the demo path.
+- LLM mode is optional and requires an external provider key. `SCRIPTED` mode remains the tested
+  default and needs no key.
 
 ## 13. Documentation
 

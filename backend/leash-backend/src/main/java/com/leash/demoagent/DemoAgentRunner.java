@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -28,52 +29,63 @@ public class DemoAgentRunner {
   private final DemoLeashClient client;
   private final DemoInvoiceLoader invoiceLoader;
   private final Clock clock;
+  private final LlmDemoAgent llmAgent;
   private final ReentrantLock runLock = new ReentrantLock();
 
   public DemoAgentRunner(DemoLeashClient client, DemoInvoiceLoader invoiceLoader, Clock clock) {
+    this(client, invoiceLoader, clock, null);
+  }
+
+  @Autowired
+  public DemoAgentRunner(
+      DemoLeashClient client, DemoInvoiceLoader invoiceLoader, Clock clock, LlmDemoAgent llmAgent) {
     this.client = client;
     this.invoiceLoader = invoiceLoader;
     this.clock = clock;
+    this.llmAgent = llmAgent;
   }
 
   public DemoRunResult run(DemoMode mode) {
-    if (mode == null || mode == DemoMode.SCRIPTED) {
-      return runScripted();
-    }
-    throw new DemoLlmNotConfiguredException();
-  }
-
-  private DemoRunResult runScripted() {
     runLock.lock();
     try {
-      Instant startedAt = clock.instant();
-      DemoBudget budgetBefore = client.checkBudget();
-
-      List<DemoSceneResult> scenes = new ArrayList<>();
-      for (DemoInvoice invoice : invoiceLoader.invoices()) {
-        try {
-          scenes.add(DemoSceneResult.from(invoice, client.payInvoice(invoice)));
-        } catch (DemoClientException exception) {
-          scenes.add(DemoSceneResult.from(invoice, exception));
-        }
+      if (mode == null || mode == DemoMode.SCRIPTED) {
+        return runScripted();
       }
-
-      DemoBudget budgetAfter = readBudgetAfterRun();
-      String summary = buildSummary(scenes, budgetAfter);
-      DemoRunResult result =
-          new DemoRunResult(
-              DemoMode.SCRIPTED,
-              startedAt,
-              clock.instant(),
-              budgetBefore,
-              budgetAfter,
-              scenes,
-              summary);
-      log.info("Demo run finished: mode=SCRIPTED scenes={} summary={}", scenes.size(), summary);
-      return result;
+      if (llmAgent == null || !llmAgent.isConfigured()) {
+        throw new DemoLlmNotConfiguredException();
+      }
+      return llmAgent.run();
     } finally {
       runLock.unlock();
     }
+  }
+
+  private DemoRunResult runScripted() {
+    Instant startedAt = clock.instant();
+    DemoBudget budgetBefore = client.checkBudget();
+
+    List<DemoSceneResult> scenes = new ArrayList<>();
+    for (DemoInvoice invoice : invoiceLoader.invoices()) {
+      try {
+        scenes.add(DemoSceneResult.from(invoice, client.payInvoice(invoice)));
+      } catch (DemoClientException exception) {
+        scenes.add(DemoSceneResult.from(invoice, exception));
+      }
+    }
+
+    DemoBudget budgetAfter = readBudgetAfterRun();
+    String summary = buildSummary(scenes, budgetAfter);
+    DemoRunResult result =
+        new DemoRunResult(
+            DemoMode.SCRIPTED,
+            startedAt,
+            clock.instant(),
+            budgetBefore,
+            budgetAfter,
+            scenes,
+            summary);
+    log.info("Demo run finished: mode=SCRIPTED scenes={} summary={}", scenes.size(), summary);
+    return result;
   }
 
   private DemoBudget readBudgetAfterRun() {
@@ -85,7 +97,7 @@ public class DemoAgentRunner {
     }
   }
 
-  private static String buildSummary(List<DemoSceneResult> scenes, DemoBudget budgetAfter) {
+  static String buildSummary(List<DemoSceneResult> scenes, DemoBudget budgetAfter) {
     int approved = 0;
     int escalated = 0;
     int denied = 0;

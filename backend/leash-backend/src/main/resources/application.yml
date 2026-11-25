@@ -57,8 +57,20 @@ management:
 leash:
   max-payment-minor: ${LEASH_MAX_PAYMENT_MINOR:100000}
   admin:
-    username: admin
-    password-hash: "$2a$10$fJGOIu3FIJi7HVDAadwm9OCfwYvqb.1RZ.x70mCXeruUvTyVM5JNa"
+    # No usable default: blank values fail AdminProperties validation at startup. The legacy
+    # ADMIN_* names keep existing local .env files working; new deployments should use LEASH_ADMIN_*.
+    username: ${LEASH_ADMIN_USERNAME:${ADMIN_USERNAME:}}
+    password-hash: ${LEASH_ADMIN_PASSWORD_HASH:${ADMIN_PASSWORD_HASH:}}
+    rate-limit:
+      enabled: ${LEASH_ADMIN_RATE_LIMIT_ENABLED:true}
+  llm:
+    # OpenAI-compatible tool-calling endpoint. Leave blank to keep LLM mode disabled.
+    base-url: ${LEASH_LLM_BASE_URL:}
+    api-key: ${LEASH_LLM_API_KEY:}
+    model: ${LEASH_LLM_MODEL:}
+    timeout: ${LEASH_LLM_TIMEOUT:30s}
+    max-iterations: ${LEASH_LLM_MAX_ITERATIONS:8}
+    temperature: ${LEASH_LLM_TEMPERATURE:0.0}
   reconciler:
     enabled: ${LEASH_RECONCILER_ENABLED:true}
     interval: ${LEASH_RECONCILER_INTERVAL:30s}

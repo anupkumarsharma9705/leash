@@ -1,5 +1,6 @@
 package com.leash.demoagent.api;
 
+import com.leash.demoagent.AgentModelException;
 import com.leash.demoagent.DemoAgentNotReadyException;
 import com.leash.demoagent.DemoClientException;
 import com.leash.demoagent.DemoLlmNotConfiguredException;
@@ -27,6 +28,18 @@ class DemoExceptionHandler {
         "LLM mode is not configured",
         exception.getMessage(),
         "LLM_NOT_CONFIGURED",
+        request,
+        null);
+  }
+
+  @ExceptionHandler(AgentModelException.class)
+  ResponseEntity<ProblemDetail> modelFailure(
+      AgentModelException exception, HttpServletRequest request) {
+    return problem(
+        HttpStatus.BAD_GATEWAY,
+        "LLM request failed",
+        exception.getMessage(),
+        "LLM_UPSTREAM_FAILED",
         request,
         null);
   }

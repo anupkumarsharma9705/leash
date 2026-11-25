@@ -23,15 +23,25 @@ services:
         value: https://api-m.sandbox.paypal.com
       - key: LEASH_RECONCILER_ENABLED
         value: "true"
-      - key: ADMIN_USERNAME
+      # Generate a unique admin password for every public deployment. Never reuse the local
+      # admin-test-password from the README.
+      - key: LEASH_ADMIN_USERNAME
         sync: false
-      - key: ADMIN_PASSWORD_HASH
+      - key: LEASH_ADMIN_PASSWORD_HASH
         sync: false
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
       - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      # Optional: leave blank to run the deterministic SCRIPTED demo. Set all three to enable LLM
+      # tool calling. The endpoint must be OpenAI-compatible (for example DeepSeek or OpenAI).
+      - key: LEASH_LLM_BASE_URL
+        sync: false
+      - key: LEASH_LLM_API_KEY
+        sync: false
+      - key: LEASH_LLM_MODEL
         sync: false
       - key: DB_HOST
         fromDatabase:
