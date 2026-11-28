@@ -353,8 +353,8 @@ credentials, never calls PayPal, and its output cannot bypass policy.
 
 Recorded on 2026-11-27:
 
-- Backend `.\mvnw.cmd -B verify`: **BUILD SUCCESS**, **383 tests**, 0 failures, 0 errors, 0 skipped.
-- Spotless: **211 Java files clean**.
+- Backend `.\mvnw.cmd -B verify`: **BUILD SUCCESS**, **386 tests**, 0 failures, 0 errors, 0 skipped.
+- Spotless: **213 Java files clean**.
 - JaCoCo policy gate: **97.5% line coverage** (115/118), minimum 90%.
 - Frontend `npm run build`: TypeScript strict pass with Vite 6.4.6, 109 modules, 1,590.54 kB JS /
   453.02 kB gzip, 35.07 kB CSS / 7.06 kB gzip.

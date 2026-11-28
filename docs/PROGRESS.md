@@ -294,8 +294,8 @@ Updated: **2026-11-27 (Fri, IST)** - Phase **A** complete (A1, A2, and A3 local 
 ## Verification (real output)
 
 - `.\mvnw.cmd -B verify` -> **BUILD SUCCESS**.
-- Tests: **383 run, 0 failures, 0 errors, 0 skipped**.
-- Spotless: **211 Java files clean, 0 need changes**.
+- Tests: **386 run, 0 failures, 0 errors, 0 skipped**.
+- Spotless: **213 Java files clean, 0 need changes**.
 - JaCoCo gate: **policy package 97.5% line coverage** (115/118 lines), minimum 90%.
 - Frontend `npm run build` -> **success**; TypeScript strict pass; Vite 6.4.6 bundle 109 modules, 1,590.54 kB JS and 35.07 kB CSS (453.02 kB JS gzip, 7.06 kB CSS gzip). Vite warns that the chunk exceeds 500 kB because AG Grid is bundled whole; accepted for the console.
 - Frontend `npm run lint` -> **0 errors, 0 warnings**.

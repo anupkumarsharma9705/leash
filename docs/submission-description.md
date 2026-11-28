@@ -178,7 +178,7 @@ to spent or reserved budget.
 
 ### What was verified
 
-- Backend `./mvnw -B verify`: **383 tests**, 0 failures, 0 errors, 0 skipped; 211 Java files
+- Backend `./mvnw -B verify`: **386 tests**, 0 failures, 0 errors, 0 skipped; 213 Java files
   Spotless-clean; policy package coverage **97.5%** (115/118) against a 90% gate.
 - Frontend TypeScript strict build and lint: clean.
 - Live browser pass: sign-in, server filters, paging, timeline, Escape/focus restoration, approval
@@ -266,7 +266,7 @@ Repo and run-from-source instructions: `<REPO_URL>`
 | LLM provider/model called | **No in the recorded run** — LLM mode is implemented; the demo is `SCRIPTED` and ships no key |
 | AG Grid Community used | **Yes**, 36.3.0 |
 | Render deployment live | **No** — blueprint only |
-| Backend tests green | **Yes**, 383 |
+| Backend tests green | **Yes**, 386 |
 | Docker image built and smoke-tested | **Yes**, locally |
 | Real money moved | **Never** — sandbox only |
 

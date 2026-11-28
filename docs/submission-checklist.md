@@ -16,7 +16,7 @@ Status on **2026-11-12**. Deadline: **18:00 IST**. Frozen after submission.
 
 ## What is verified
 
-- Backend: **383 tests**, 0 failures, 0 errors, 0 skipped; 211 Java files Spotless-clean; policy
+- Backend: **386 tests**, 0 failures, 0 errors, 0 skipped; 213 Java files Spotless-clean; policy
   coverage **97.5%** (115/118).
 - Frontend: TypeScript strict build and lint clean.
 - Live browser: sign-in, ledger, filters, timeline, approval confirmation and approval, policy save,
