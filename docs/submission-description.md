@@ -3,8 +3,9 @@
 Copy-paste text for the submission form and the YouTube description. Replace the two placeholders
 before publishing: `<REPO_URL>` and `<VIDEO_URL>`.
 
-**Read the honesty block before editing anything.** This build does not call an LLM and has not
-completed a real PayPal sandbox payout or a live webhook. Presenting those as done would be false.
+**Read the honesty block before editing anything.** LLM mode is implemented but optional and the
+recorded demo is `SCRIPTED`; no real PayPal sandbox payout or live webhook has been completed.
+Presenting those as done would be false.
 
 ---
 
@@ -31,7 +32,7 @@ operator set.
 - WireMock
 - React 19
 - TypeScript 7
-- Vite 8
+- Vite 6
 - TanStack Query 5
 - AG Grid Community 36
 - Docker
@@ -39,7 +40,10 @@ operator set.
 - PayPal Payouts (sandbox)
 - Render (blueprint prepared; not deployed — tick only if you deploy it)
 
-**Do not tick** an LLM, model provider, or AI SDK. None is wired in this build.
+**AI model:** the build was produced with **DeepSeek V4.1 Flash via OpenCode**. At runtime the demo
+agent is model-agnostic: it uses whatever OpenAI-compatible tool-calling model `LEASH_LLM_*`
+configures. The repository ships no key, and the recorded demo is `SCRIPTED`, so do not present a
+live model run unless you recorded one.
 
 **Repository:** `<REPO_URL>`
 
@@ -60,7 +64,7 @@ git clone <REPO_URL>
 cd leash
 docker compose up -d
 
-# Copy the sample env and set ADMIN_PASSWORD_HASH to the documented local test hash
+# Copy the sample env and set LEASH_ADMIN_PASSWORD_HASH to the documented local test hash
 Copy-Item .env.example .env
 
 # Terminal A
@@ -174,8 +178,8 @@ to spent or reserved budget.
 
 ### What was verified
 
-- Backend `./mvnw -B verify`: **364 tests**, 0 failures, 0 errors, 0 skipped; Spotless clean; policy
-  package coverage **97.5%** (115/118) against a 90% gate.
+- Backend `./mvnw -B verify`: **383 tests**, 0 failures, 0 errors, 0 skipped; 211 Java files
+  Spotless-clean; policy package coverage **97.5%** (115/118) against a 90% gate.
 - Frontend TypeScript strict build and lint: clean.
 - Live browser pass: sign-in, server filters, paging, timeline, Escape/focus restoration, approval
   confirmation and approval, policy save, suspend/resume, demo gating, and a scripted run whose repeat
@@ -194,9 +198,10 @@ to spent or reserved budget.
   not Gate G1. The `$12` payment stays `APPROVED` by design when credentials are absent.
 - **No live PayPal webhook.** No `PAYPAL_WEBHOOK_ID` and no public endpoint. Signature verification,
   dedupe, and state application are tested against fakes and WireMock.
-- **No LLM is called.** LLM mode is not implemented in this build; the route fails closed with
-  `501 LLM_NOT_CONFIGURED`, and no provider, model, or key was chosen. `SCRIPTED` is the demo path.
-  The project is infrastructure *for* AI agents, not an LLM application in this build.
+- **No live LLM run in the recorded demo.** LLM mode is implemented behind `AgentModelClient`
+  against an OpenAI-compatible tool-calling endpoint. The repository ships no key, so the recorded
+  run is `SCRIPTED`; without complete `LEASH_LLM_*` values the route still fails closed with
+  `501 LLM_NOT_CONFIGURED`. The project is infrastructure *for* AI agents first.
 - **No Render deployment.** The blueprint is in the repo; no account was available.
 
 ### What we learned
@@ -209,9 +214,9 @@ let an operator trust an agent with a payment tool at all.
 ### What's next
 
 Connect the PayPal sandbox credentials and complete Gate G1, register the webhook on a deployed
-instance, then implement LLM mode behind a new `AgentModelClient` port and complete Gate L. After that: more rails,
-per-agent velocity limits, and team approvals. Leash is sandbox-only, USD-only, and not
-production-ready today.
+instance, and run LLM mode with a provider key to complete Gate L. After that: more rails, per-agent
+velocity limits, and team approvals. Leash is sandbox-only, USD-only, and not production-ready
+today.
 
 ---
 
@@ -221,9 +226,10 @@ Leash is a spending-control gateway between an AI agent and PayPal. The agent as
 checks an operator-owned weekly budget, payee allow-list, per-payment cap, and auto-approve threshold,
 then approves, escalates to a human, or denies. Every decision, reservation, submission, and status
 change lands in an append-only ledger. Built with Java 21, Spring Boot 4, PostgreSQL, React,
-TypeScript, and AG Grid Community. PayPal Payouts sandbox is the money rail. This build runs a
-deterministic scripted demo agent; no LLM is called, and no real payout or live webhook was verified
-because sandbox credentials were unavailable. Sandbox only; not production-ready.
+TypeScript, and AG Grid Community. PayPal Payouts sandbox is the money rail. The demo agent runs
+deterministically in `SCRIPTED` mode by default and supports an optional OpenAI-compatible LLM mode;
+the recorded demo is scripted and no provider key ships in the repo. No real payout or live webhook
+was verified because sandbox credentials were unavailable. Sandbox only; not production-ready.
 
 ---
 
@@ -241,9 +247,10 @@ unknown payee is denied. Running it again replays all three with no second payou
 Stack: Java 21, Spring Boot 4, PostgreSQL, Flyway, React, TypeScript, Vite, TanStack Query, AG Grid
 Community, Docker. Money rail: PayPal Payouts sandbox.
 
-Honest limits: this build runs the demo agent in SCRIPTED mode and calls no LLM. A real PayPal
-sandbox payout and a live webhook were not verified because sandbox credentials were unavailable; the
-integration is covered by WireMock tests only. Sandbox only. Not production-ready.
+Honest limits: the recorded demo runs the agent in SCRIPTED mode; LLM mode is implemented but needs
+a deployment-configured key. A real PayPal sandbox payout and a live webhook were not verified
+because sandbox credentials were unavailable; the integration is covered by WireMock tests only.
+Sandbox only. Not production-ready.
 
 Repo and run-from-source instructions: `<REPO_URL>`
 
@@ -256,13 +263,13 @@ Repo and run-from-source instructions: `<REPO_URL>`
 | PayPal Payouts sandbox adapter implemented | **Yes**, behind `PayPalPayoutsClient` |
 | Real sandbox payout completed | **No** — credentials unavailable |
 | Live webhook verified | **No** — no webhook id or public endpoint |
-| LLM provider/model called | **No** — `LLM` returns `501`, demo is `SCRIPTED` |
+| LLM provider/model called | **No in the recorded run** — LLM mode is implemented; the demo is `SCRIPTED` and ships no key |
 | AG Grid Community used | **Yes**, 36.3.0 |
 | Render deployment live | **No** — blueprint only |
-| Backend tests green | **Yes**, 364 |
+| Backend tests green | **Yes**, 383 |
 | Docker image built and smoke-tested | **Yes**, locally |
 | Real money moved | **Never** — sandbox only |
 
-If credentials arrive before the deadline, complete Gate G1, register the webhook, re-record the parts
-of the video that show `SUBMITTED`/`SUCCEEDED`, and update this table. Do not edit the table to claim a
-result that was not observed.
+If credentials or an LLM key arrive before recording, complete Gate G1, register the webhook, run
+the mode you intend to show, and update this table. Do not edit the table to claim a result that was
+not observed.

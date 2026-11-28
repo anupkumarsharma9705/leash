@@ -1,8 +1,12 @@
 # 003 - LLM demo mode is deferred, not faked
 
-- **Status:** accepted
+- **Status:** superseded by 005
 - **Date:** 2026-11-12
 - **Deciders:** implementation agent (owner approval pending with AGENTS.md)
+
+> Historical decision. LLM mode was implemented later behind the same `AgentModelClient` port; see
+> [005-llm-thin-client.md](005-llm-thin-client.md). The fail-closed behavior below still applies when
+> the three `LEASH_LLM_*` values are absent.
 
 ## Context
 

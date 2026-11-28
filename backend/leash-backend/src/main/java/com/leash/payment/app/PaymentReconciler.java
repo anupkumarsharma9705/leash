@@ -35,9 +35,15 @@ import org.springframework.stereotype.Service;
  * <p>Network calls happen outside transactions, mirroring the gateway's committed-before-PayPal
  * rule. Each row is isolated: one PayPal failure does not abort the rest of the pass.
  *
+ * <p>The gateway does not throw for expected PayPal failures: it returns the payment in {@code
+ * APPROVED} when a submission was transiently unavailable. A pass therefore counts a retry as
+ * successful only when the returned payment actually left {@code APPROVED}; a payment that stays
+ * {@code APPROVED} is a failed attempt and is retried with per-payment exponential backoff.
+ *
  * <p>Circuit breaker: after {@link ReconcilerProperties#maxConsecutiveFailures()} consecutive
- * failed passes, the reconciler pauses for {@link ReconcilerProperties#circuitBreakerPause()}.
- * Per-payment exponential backoff: each failed retry doubles the wait time up to a cap.
+ * failed passes, the reconciler pauses for {@link ReconcilerProperties#circuitBreakerPause()}. A
+ * pass with no work (for example, every row is inside its backoff window) does not reset the
+ * counter, so a healthy-looking idle pass cannot mask a run of failures.
  */
 @Service
 public class PaymentReconciler {
@@ -55,8 +61,10 @@ public class PaymentReconciler {
   private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
   private volatile Instant circuitBreakerUntil = Instant.EPOCH;
 
-  // Per-payment exponential backoff: paymentId -> retry count
-  private final Map<UUID, Integer> retryCounts = new ConcurrentHashMap<>();
+  // Per-payment backoff: paymentId -> failed attempts and the earliest next attempt.
+  private final Map<UUID, RetryState> retries = new ConcurrentHashMap<>();
+
+  private record RetryState(int failures, Instant nextAttemptAt) {}
 
   public PaymentReconciler(
       PaymentStore paymentStore,
@@ -79,28 +87,34 @@ public class PaymentReconciler {
     if (!properties.enabled()) {
       return;
     }
-    // Check circuit breaker
     if (clock.instant().isBefore(circuitBreakerUntil)) {
       log.debug("Circuit breaker active, skipping reconciliation until {}", circuitBreakerUntil);
       return;
     }
     try {
       ReconciliationSummary summary = reconcileOnce();
-      // Update circuit breaker state based on pass result
-      if (summary.failures() > 0 && summary.approvedRetried() == 0 && summary.statusPolled() == 0) {
-        int failures = consecutiveFailures.incrementAndGet();
-        if (failures >= properties.maxConsecutiveFailures()) {
-          circuitBreakerUntil = clock.instant().plus(properties.circuitBreakerPause());
-          log.warn(
-              "Circuit breaker tripped after {} consecutive failed passes. Pausing for {}",
-              failures,
-              properties.circuitBreakerPause());
-        }
-      } else {
+      boolean anySuccess = summary.approvedRetried() > 0 || summary.statusPolled() > 0;
+      if (summary.failures() > 0 && !anySuccess) {
+        registerFailure();
+      } else if (anySuccess) {
         consecutiveFailures.set(0);
       }
+      // No work at all: leave the breaker counter untouched. Backoff-skips must not look like a
+      // clean pass.
     } catch (RuntimeException exception) {
       log.error("Payment reconciliation pass failed", exception);
+      registerFailure();
+    }
+  }
+
+  private void registerFailure() {
+    int failures = consecutiveFailures.incrementAndGet();
+    if (failures >= properties.maxConsecutiveFailures()) {
+      circuitBreakerUntil = clock.instant().plus(properties.circuitBreakerPause());
+      log.warn(
+          "Circuit breaker tripped after {} consecutive failed passes. Pausing for {}",
+          failures,
+          properties.circuitBreakerPause());
     }
   }
 
@@ -118,22 +132,24 @@ public class PaymentReconciler {
             now.minus(properties.approvedRetryAfter()),
             properties.batchSize());
     for (PaymentRecord record : approved) {
-      int retryCount = retryCounts.getOrDefault(record.id(), 0);
-      // Exponential backoff: wait retryCount^2 * baseInterval before retrying
-      if (retryCount > 0) {
-        Duration backoff = properties.interval().multipliedBy(retryCount * retryCount);
-        Instant nextRetry = record.createdAt().plus(backoff);
-        if (clock.instant().isBefore(nextRetry)) {
-          continue; // Skip this payment, not ready for retry yet
-        }
+      if (isInBackoff(record.id(), now)) {
+        continue;
       }
       try {
-        gateway.retryApproved(record);
-        retried++;
-        retryCounts.remove(record.id());
+        PaymentResult result = gateway.retryApproved(record);
+        if (result.state() == PaymentState.APPROVED) {
+          // The gateway swallowed a transient PayPal/credentials failure. The payment is still
+          // APPROVED, so this attempt did not repair it.
+          failures++;
+          recordFailure(record.id(), now);
+          log.warn("Reconciler retry did not leave APPROVED; deferring: paymentId={}", record.id());
+        } else {
+          retried++;
+          retries.remove(record.id());
+        }
       } catch (RuntimeException exception) {
         failures++;
-        retryCounts.merge(record.id(), 1, Integer::sum);
+        recordFailure(record.id(), now);
         log.warn(
             "Reconciler could not retry a payment; it stays APPROVED: paymentId={}",
             record.id(),
@@ -147,8 +163,12 @@ public class PaymentReconciler {
             now.minus(properties.submittedPollAfter()),
             properties.batchSize());
     for (PaymentRecord record : submitted) {
+      if (isInBackoff(record.id(), now)) {
+        continue;
+      }
       if (record.paypalBatchId() == null || record.paypalBatchId().isBlank()) {
         failures++;
+        recordFailure(record.id(), now);
         log.warn(
             "Reconciler found a SUBMITTED payment without a PayPal batch id: paymentId={}",
             record.id());
@@ -161,14 +181,27 @@ public class PaymentReconciler {
         if (updated.state() == PaymentState.SUCCEEDED || updated.state() == PaymentState.FAILED) {
           transitions++;
         }
-        retryCounts.remove(record.id());
+        retries.remove(record.id());
       } catch (OptimisticLockingFailureException exception) {
-        failures++;
-        log.info(
-            "Reconciler lost a concurrent update and will retry later: paymentId={}", record.id());
+        PaymentRecord latest = paymentStore.findById(record.id()).orElse(null);
+        if (latest != null && latest.state() != PaymentState.SUBMITTED) {
+          // A webhook or another poll won the race and already moved the payment. This pass did
+          // not fail; the authoritative state is terminal.
+          retries.remove(record.id());
+          log.info(
+              "Reconciler poll lost a concurrent update; payment is now {}: paymentId={}",
+              latest.state(),
+              record.id());
+        } else {
+          failures++;
+          recordFailure(record.id(), now);
+          log.info(
+              "Reconciler lost a concurrent update and will retry later: paymentId={}",
+              record.id());
+        }
       } catch (RuntimeException exception) {
         failures++;
-        retryCounts.merge(record.id(), 1, Integer::sum);
+        recordFailure(record.id(), now);
         log.warn(
             "Reconciler could not poll PayPal: paymentId={} payoutBatchId={}",
             record.id(),
@@ -176,6 +209,8 @@ public class PaymentReconciler {
             exception);
       }
     }
+
+    pruneRetries();
 
     ReconciliationSummary summary =
         new ReconciliationSummary(retried, polled, transitions, failures);
@@ -188,5 +223,50 @@ public class PaymentReconciler {
           failures);
     }
     return summary;
+  }
+
+  private boolean isInBackoff(UUID paymentId, Instant now) {
+    RetryState state = retries.get(paymentId);
+    return state != null && now.isBefore(state.nextAttemptAt());
+  }
+
+  private void recordFailure(UUID paymentId, Instant now) {
+    retries.compute(
+        paymentId,
+        (id, current) -> {
+          int failures = current == null ? 1 : current.failures() + 1;
+          return new RetryState(failures, now.plus(backoffFor(failures)));
+        });
+  }
+
+  private Duration backoffFor(int failures) {
+    int exponent = Math.min(Math.max(failures - 1, 0), 20);
+    Duration delay;
+    try {
+      delay = properties.interval().multipliedBy(1L << exponent);
+    } catch (ArithmeticException exception) {
+      return properties.maxRetryBackoff();
+    }
+    return delay.compareTo(properties.maxRetryBackoff()) > 0 ? properties.maxRetryBackoff() : delay;
+  }
+
+  /**
+   * Drops backoff state for payments that are no longer open.
+   *
+   * <p>Without this, a payment resolved by a webhook or an admin would leave its in-memory entry
+   * behind forever. The state query is bounded to the tracked ids, so a long-running process does
+   * not accumulate stale entries.
+   */
+  private void pruneRetries() {
+    if (retries.isEmpty()) {
+      return;
+    }
+    Map<UUID, PaymentState> states = paymentStore.statesFor(retries.keySet());
+    retries
+        .keySet()
+        .removeIf(paymentId -> {
+          PaymentState state = states.get(paymentId);
+          return state != PaymentState.APPROVED && state != PaymentState.SUBMITTED;
+        });
   }
 }

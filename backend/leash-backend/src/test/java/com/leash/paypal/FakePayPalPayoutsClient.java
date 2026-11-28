@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class FakePayPalPayoutsClient implements PayPalPayoutsClient {
 
   private final AtomicInteger sequence = new AtomicInteger();
+  private final AtomicInteger submissionAttempts = new AtomicInteger();
   private final Map<String, PayoutRequest> requests = new ConcurrentHashMap<>();
   private final Map<String, PayPalPayoutStatus> statuses = new ConcurrentHashMap<>();
   private final List<PayoutSubmission> submissions = new CopyOnWriteArrayList<>();
@@ -30,6 +31,7 @@ public final class FakePayPalPayoutsClient implements PayPalPayoutsClient {
 
   @Override
   public synchronized PayoutSubmission submit(PayoutRequest request) {
+    submissionAttempts.incrementAndGet();
     if (failure != null) {
       throw failure;
     }
@@ -130,12 +132,18 @@ public final class FakePayPalPayoutsClient implements PayPalPayoutsClient {
     statuses.clear();
     submissions.clear();
     sequence.set(0);
+    submissionAttempts.set(0);
     submitEntered = new CountDownLatch(0);
     submitRelease = new CountDownLatch(0);
   }
 
   public List<PayoutSubmission> submissions() {
     return List.copyOf(submissions);
+  }
+
+  /** Number of attempts, including submissions that failed before a batch id was created. */
+  public int submissionAttempts() {
+    return submissionAttempts.get();
   }
 
   public PayoutRequest requestFor(String payoutBatchId) {

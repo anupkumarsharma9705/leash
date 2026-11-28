@@ -276,6 +276,7 @@ simulation of a successful payout.
 | `LEASH_ALLOW_LIVE` | `false` | Safety guard; never enable for this project |
 | `LEASH_RECONCILER_ENABLED` | `true` | Retry parked submissions and poll stale ones |
 | `LEASH_RECONCILER_INTERVAL` | `30s` | Scheduler interval |
+| `LEASH_RECONCILER_MAX_RETRY_BACKOFF` | `1h` | Cap for per-payment exponential retry backoff |
 | `LEASH_DEMO_AGENT_NAME` | `Invoice Agent` | Demo agent matched/created by name |
 | `LEASH_DEMO_WEEKLY_LIMIT_MINOR` | `200000` | Demo weekly limit ($2,000.00) |
 | `LEASH_DEMO_AUTO_APPROVE_THRESHOLD_MINOR` | `5000` | Demo threshold ($50.00) |
@@ -306,7 +307,8 @@ pre-existing product code:
 - Approval workflow with a full policy re-check, idempotent decisions, and race-safe locking.
 - React + TypeScript console with an AG Grid ledger, timeline drawer, approvals, budget bars, kill
   switch, policy editor, and demo runner.
-- Deterministic demo agent that uses only the public HTTP API.
+- Demo agent with a deterministic `SCRIPTED` path and an optional `LLM` path that uses an
+  OpenAI-compatible tool-calling model, always through the public HTTP API.
 
 ## 9. Sponsor and open-source tools
 
@@ -317,7 +319,7 @@ pre-existing product code:
 | **Render** | A `render.yaml` blueprint and multi-stage `Dockerfile` are prepared for one web service plus PostgreSQL. The image was built and smoke-tested locally, but no public Render URL is claimed because no Render account was available to deploy it. Run-from-source is the verified path. |
 
 Stack: Java 21, Spring Boot 4.1.2, Spring Framework 7, Spring Security 7, PostgreSQL 16, Flyway,
-React 19, TypeScript 7 strict, Vite 8, TanStack Query 5, AG Grid 36.
+React 19, TypeScript 7 strict, Vite 6, TanStack Query 5, AG Grid 36.
 
 ## 10. AI model
 
@@ -349,14 +351,17 @@ credentials, never calls PayPal, and its output cannot bypass policy.
 
 ## 11. Verification
 
-Recorded on 2026-11-12:
+Recorded on 2026-11-27:
 
-- Backend `.\mvnw.cmd -B verify`: **BUILD SUCCESS**, **364 tests**, 0 failures, 0 errors, 0 skipped.
-- Spotless: **199 Java files clean**.
+- Backend `.\mvnw.cmd -B verify`: **BUILD SUCCESS**, **383 tests**, 0 failures, 0 errors, 0 skipped.
+- Spotless: **211 Java files clean**.
 - JaCoCo policy gate: **97.5% line coverage** (115/118), minimum 90%.
-- Frontend `npm run build`: TypeScript strict pass, 93 modules, 1,522.12 kB JS / 431.84 kB gzip,
-  32.05 kB CSS / 6.55 kB gzip.
+- Frontend `npm run build`: TypeScript strict pass with Vite 6.4.6, 109 modules, 1,590.54 kB JS /
+  453.02 kB gzip, 35.07 kB CSS / 7.06 kB gzip.
 - Frontend `npm run lint`: clean.
+
+The container and live-browser evidence below was recorded on 2026-11-12; the current source was
+re-verified with the backend and frontend commands above.
 - Live browser pass: sign-in, ledger filters and paging, payment timeline, approval confirmation and
   approval, policy editor save, suspend/resume, demo navigation, mode gating, and a scripted demo
   run whose second execution replayed all three payments with no budget change.
@@ -403,7 +408,7 @@ Leash is a hackathon sandbox control plane, **not production-ready**:
   YouTube text, with an honesty table.
 - [`docs/submission-checklist.md`](docs/submission-checklist.md) — done/blocked/owner-only items.
 - [`docs/decisions/`](docs/decisions/) — ADR 001 (Payouts rail), 002 (status mapping), 003 (LLM
-  deferred).
+  deferral, superseded), 004 (append-only ledger), and 005 (LLM thin client).
 
 ## 14. License
 

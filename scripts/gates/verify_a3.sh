@@ -10,6 +10,7 @@ LOCAL_PORT="${LEASH_LOCAL_PORT:-18080}"
 BASE="${LEASH_DEMO_URL:-http://localhost:$LOCAL_PORT}"
 REMOTE=0
 [ -n "${LEASH_DEMO_URL:-}" ] && REMOTE=1
+ADMIN_USER="${LEASH_ADMIN_USERNAME:-admin}"
 
 APP_PID=""
 LOG="$(mktemp)"
@@ -81,22 +82,33 @@ curl -fsS "$BASE/actuator/health/readiness" | grep -q '"status":"UP"' || fail "r
 ok "readiness is UP"
 
 step "Prometheus metrics"
-METRICS="$(curl -fsS "$BASE/actuator/prometheus")"
-echo "$METRICS" | grep -q '^jvm_memory_used_bytes' || fail "JVM metrics missing"
-echo "$METRICS" | grep -q '^http_server_requests_seconds_count' || fail "HTTP metrics missing"
-COUNT="$(echo "$METRICS" | grep -c '^[a-zA-Z_][a-zA-Z0-9_]*{')"
-[ "$COUNT" -ge 10 ] || fail "expected at least 10 metric series, found $COUNT"
-ok "Prometheus exposes $COUNT series (JVM + HTTP)"
+# Metrics are admin-only. Without credentials, prove the endpoint is protected; with
+# LEASH_ADMIN_PASSWORD, also prove the JVM and HTTP series are present.
+if [ -z "${LEASH_ADMIN_PASSWORD:-}" ]; then
+  METRICS_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/actuator/prometheus")"
+  case "$METRICS_STATUS" in
+    401|403) ok "Prometheus is protected (HTTP $METRICS_STATUS); set LEASH_ADMIN_PASSWORD to verify series" ;;
+    *) fail "expected /actuator/prometheus to require admin auth, got HTTP $METRICS_STATUS" ;;
+  esac
+else
+  METRICS="$(curl -fsS -u "$ADMIN_USER:$LEASH_ADMIN_PASSWORD" "$BASE/actuator/prometheus")" \
+    || fail "authenticated Prometheus scrape failed"
+  echo "$METRICS" | grep -q '^jvm_memory_used_bytes' || fail "JVM metrics missing"
+  echo "$METRICS" | grep -q '^http_server_requests_seconds_count' || fail "HTTP metrics missing"
+  COUNT="$(echo "$METRICS" | grep -c '^[a-zA-Z_][a-zA-Z0-9_]*{')"
+  [ "$COUNT" -ge 10 ] || fail "expected at least 10 metric series, found $COUNT"
+  ok "Prometheus exposes $COUNT series (JVM + HTTP, admin-authenticated)"
+fi
 
 step "Scripted demo (3 scenes)"
 if [ -z "${LEASH_ADMIN_PASSWORD:-}" ]; then
   pending "set LEASH_ADMIN_PASSWORD to include the authenticated demo run"
 else
-  curl -fsS -c "$COOKIE_JAR" -u "admin:$LEASH_ADMIN_PASSWORD" \
+  curl -fsS -c "$COOKIE_JAR" -u "$ADMIN_USER:$LEASH_ADMIN_PASSWORD" \
     "$BASE/api/v1/admin/demo/status" >/dev/null || fail "admin login or demo status failed"
   XSRF="$(awk '$6 == "XSRF-TOKEN" {print $7}' "$COOKIE_JAR")"
   [ -n "$XSRF" ] || fail "XSRF-TOKEN cookie missing"
-  RESPONSE="$(curl -fsS -b "$COOKIE_JAR" -u "admin:$LEASH_ADMIN_PASSWORD" \
+  RESPONSE="$(curl -fsS -b "$COOKIE_JAR" -u "$ADMIN_USER:$LEASH_ADMIN_PASSWORD" \
     -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
     -X POST "$BASE/api/v1/admin/demo/run?mode=SCRIPTED")"
   echo "$RESPONSE" | node -e '

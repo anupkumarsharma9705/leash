@@ -41,10 +41,14 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * HTTP security.
  *
- * <p>Two chains exist on purpose. {@code /api/v1/admin/**} is session-capable HTTP Basic with an
- * in-memory BCrypt credential, CSRF protection backed by a readable cookie, and RFC 7807 errors.
- * Everything else keeps the stateless agent-key chain. An agent key is never consulted by the admin
- * chain, so it cannot reach an administrative route even if it is valid on the agent API.
+ * <p>Two chains exist on purpose. {@code /api/v1/admin/**} and the actuator metrics endpoints are
+ * session-capable HTTP Basic with an in-memory BCrypt credential, CSRF protection backed by a
+ * readable cookie, and RFC 7807 errors. Everything else keeps the stateless agent-key chain. An
+ * agent key is never consulted by the admin chain, so it cannot reach an administrative route even
+ * if it is valid on the agent API.
+ *
+ * <p>Only health and info are public actuator endpoints. Prometheus and the metrics explorer can
+ * reveal operational details, so they require the admin credential.
  *
  * <p>The PayPal webhook is public because PayPal authenticates it with a signature. Agent routes
  * are bearer-token routes and are exempt from CSRF; the browser never calls them.
@@ -84,7 +88,8 @@ class SecurityConfiguration {
     // For cross-subdomain deployments (e.g., app.example.com → api.example.com),
     // override with a @Profile("prod") bean that sets SameSite=None; Secure=true.
     // Current Render deployment serves frontend+backend from same origin, so Lax is sufficient.
-    http.securityMatcher("/api/v1/admin/**")
+    http.securityMatcher(
+            "/api/v1/admin/**", "/actuator/metrics", "/actuator/metrics/**", "/actuator/prometheus")
         .authorizeHttpRequests(authorization -> authorization.anyRequest().hasRole("ADMIN"))
         .csrf(csrf -> csrf.spa())
         .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class);
@@ -124,11 +129,6 @@ class SecurityConfiguration {
                     "/actuator/health",
                     "/actuator/health/readiness",
                     "/actuator/info")
-                .permitAll()
-                // Prometheus scrapes are unauthenticated on the demo deployment; restrict this
-                // route at the proxy if metrics must stay private.
-                .requestMatchers(
-                    "/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
                 .permitAll()
                 // The production image serves the built console from the jar. These paths are
                 // static assets only; every API route below still requires authentication.

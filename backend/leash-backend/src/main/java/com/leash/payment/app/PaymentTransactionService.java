@@ -36,6 +36,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -574,13 +575,15 @@ public class PaymentTransactionService {
             : PaymentState.SUBMITTED;
     String payoutBatchId = firstPresent(current.paypalBatchId(), webhook.payoutBatchId());
 
-    paymentStore.updatePayPalState(
-        webhook.paymentId(),
-        current.version(),
-        next,
-        payoutBatchId,
-        webhook.rawItemStatus(),
-        clock.instant());
+    PaymentRecord updated;
+    try {
+      updated = updateFromWebhook(current, next, payoutBatchId, webhook.rawItemStatus());
+    } catch (OptimisticLockingFailureException exception) {
+      updated = retryAfterLostWebhookRace(current, webhook, next);
+      if (updated == null) {
+        return;
+      }
+    }
     ledgerService.append(
         current.agentId(),
         webhook.paymentId(),
@@ -588,10 +591,58 @@ public class PaymentTransactionService {
         "paypal-webhook",
         webhookPayload(
             PaymentState.SUBMITTED,
-            next,
-            payoutBatchId,
+            updated.state(),
+            updated.paypalBatchId(),
             webhook.rawItemStatus(),
             webhook.eventType()));
+  }
+
+  private PaymentRecord updateFromWebhook(
+      PaymentRecord current, PaymentState next, String payoutBatchId, String rawItemStatus) {
+    return paymentStore.updatePayPalState(
+        current.id(), current.version(), next, payoutBatchId, rawItemStatus, clock.instant());
+  }
+
+  /**
+   * Handles a concurrent delivery that updated the row after this request read it.
+   *
+   * <p>If the winner moved the payment to a terminal state, this event is a no-op. If the winner
+   * only refreshed a still-{@code SUBMITTED} row, retry once with the fresh version so a terminal
+   * event is not dropped. If TX-B is still racing ({@code APPROVED}), rethrow so the receiver
+   * leaves the event unprocessed for PayPal redelivery.
+   *
+   * @return the already-applied record, or {@code null} when the event is a no-op
+   */
+  private PaymentRecord retryAfterLostWebhookRace(
+      PaymentRecord current, PayoutItemWebhook webhook, PaymentState next) {
+    PaymentRecord latest = paymentStore.findById(current.id()).orElse(null);
+    if (latest == null || latest.state() == PaymentState.APPROVED) {
+      throw new OptimisticLockingFailureException(
+          "Payment is still being submitted: " + current.id());
+    }
+    if (latest.state() != PaymentState.SUBMITTED) {
+      log.info(
+          "Concurrent update already resolved the payment; webhook is a no-op:"
+              + " paymentId={} state={} eventType={}",
+          current.id(),
+          latest.state(),
+          webhook.eventType());
+      return null;
+    }
+    try {
+      return updateFromWebhook(
+          latest,
+          next,
+          firstPresent(latest.paypalBatchId(), webhook.payoutBatchId()),
+          webhook.rawItemStatus());
+    } catch (OptimisticLockingFailureException retryFailure) {
+      log.info(
+          "Concurrent webhook deliveries left the payment SUBMITTED; the reconciler will converge:"
+              + " paymentId={} eventType={}",
+          current.id(),
+          webhook.eventType());
+      return null;
+    }
   }
 
   private static Map<String, Object> webhookPayload(
@@ -696,6 +747,14 @@ public class PaymentTransactionService {
       payload.put("httpStatus", httpStatus);
     }
     return payload;
+  }
+
+  /**
+   * Reads the current payment. Used by the gateway after losing a TX-B optimistic-lock race, where
+   * the update already happened elsewhere and returning the fresh row is safer than a 500.
+   */
+  public PaymentRecord findPayment(UUID paymentId) {
+    return requirePayment(paymentId);
   }
 
   private PaymentRecord requirePayment(UUID paymentId) {

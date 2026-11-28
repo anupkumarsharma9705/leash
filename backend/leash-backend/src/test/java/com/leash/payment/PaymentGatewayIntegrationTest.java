@@ -351,7 +351,7 @@ class PaymentGatewayIntegrationTest {
   }
 
   @ParameterizedTest(name = "httpStatus={0}")
-  @CsvSource({"500", "503", "429"})
+  @CsvSource({"500", "503", "429", "408"})
   void leavesAPaymentApprovedForTheReconcilerAfterATransientFailure(int httpStatus)
       throws Exception {
     CreatedAgent agent = newAgent(50_000, 10_000, "alice@example.com");
@@ -391,6 +391,29 @@ class PaymentGatewayIntegrationTest {
         .andExpect(jsonPath("$.state").value("APPROVED"));
 
     assertThat(paymentState(singlePaymentId())).isEqualTo("APPROVED");
+  }
+
+  @Test
+  void aReplayWhileApprovedDoesNotResubmitAndLeavesThePaymentToTheReconciler() throws Exception {
+    CreatedAgent agent = newAgent(50_000, 10_000, "alice@example.com");
+    paypal.failNextSubmission(
+        new PayPalPayoutException("PayPal is unavailable", 503, "debug-replay"));
+
+    mockMvc
+        .perform(payment("invoice-replay-approved", "alice@example.com", 1_200, "USD", "", agent))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.state").value("APPROVED"));
+    assertThat(paypal.submissionAttempts()).isEqualTo(1);
+
+    mockMvc
+        .perform(payment("invoice-replay-approved", "alice@example.com", 1_200, "USD", "", agent))
+        .andExpect(status().isCreated())
+        .andExpect(header().string(IDEMPOTENT_REPLAYED, "true"))
+        .andExpect(jsonPath("$.state").value("APPROVED"));
+
+    assertThat(paymentCount()).isEqualTo(1);
+    // The stored APPROVED row is reconciler-owned. A replay must not race the original request.
+    assertThat(paypal.submissionAttempts()).isEqualTo(1);
   }
 
   @ParameterizedTest(name = "httpStatus={0}")

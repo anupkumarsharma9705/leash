@@ -1,7 +1,7 @@
 # Leash Production Roadmap
 
-Status: **Phase A implemented on 2026-11-24.** A1 is verified; A2 and A3 have one external
-account step each (package publish and public deploy) that a repo owner must authorize.
+Status: **Phase A implemented; updated 2026-11-27.** A1 and A2 are verified, including the GitHub
+Packages publish. A3 is verified locally; only the public Render deploy remains an owner step.
 
 > This roadmap continues after the hackathon submission. The hackathon scope is frozen in
 > `AGENTS.md`; nothing here changes the sandbox-only demo.
@@ -92,7 +92,8 @@ Anti-deviation rules:
 **Work**
 
 - Production config: `${PORT}`, managed Postgres via `DB_*`, graceful shutdown, readiness/liveness
-  probes, Prometheus scrape endpoint, health details kept private.
+  probes, and a Prometheus scrape endpoint behind admin auth. Health stays public for Render;
+  metrics do not.
 - Render blueprint at `render.yaml`: Docker web service + Postgres, secrets marked `sync: false`.
 - Demo profile seeds the agent and the three invoices; SCRIPTED mode is deterministic.
 - The Docker image builds both Maven modules and bakes the React console into the jar.
@@ -100,7 +101,7 @@ Anti-deviation rules:
 **Done means**
 
 - `LEASH_DEMO_URL=https://<service> scripts/gates/verify_a3.sh` exits 0.
-- Health and readiness are `UP`; Prometheus exposes JVM + HTTP series.
+- Health and readiness are `UP`; Prometheus exposes JVM + HTTP series to an authenticated admin.
 - Three demo scenes return; the $12 scene reaches `SUCCEEDED` with sandbox credentials.
 - External clean-clone run takes under 10 minutes.
 - Tag `phase-a3-done`.

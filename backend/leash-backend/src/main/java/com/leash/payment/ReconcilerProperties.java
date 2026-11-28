@@ -15,7 +15,9 @@ import org.springframework.validation.annotation.Validated;
  * than {@link #submittedPollAfter()} is polled for its current payout status.
  *
  * <p>Circuit breaker: after {@link #maxConsecutiveFailures()} consecutive failed passes, the
- * reconciler pauses for {@link #circuitBreakerPause()} to avoid hammering PayPal.
+ * reconciler pauses for {@link #circuitBreakerPause()} to avoid hammering PayPal. A failed retry is
+ * retried with exponential backoff: {@code interval * 2^(failures-1)}, capped at {@link
+ * #maxRetryBackoff()}.
  */
 @Validated
 @ConfigurationProperties(prefix = "leash.reconciler")
@@ -26,4 +28,5 @@ public record ReconcilerProperties(
     @NotNull @DefaultValue("10m") Duration submittedPollAfter,
     @DefaultValue("100") @Min(1) int batchSize,
     @DefaultValue("10") @Min(1) int maxConsecutiveFailures,
-    @DefaultValue("5m") Duration circuitBreakerPause) {}
+    @DefaultValue("5m") Duration circuitBreakerPause,
+    @NotNull @DefaultValue("1h") Duration maxRetryBackoff) {}

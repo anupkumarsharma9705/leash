@@ -18,6 +18,8 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -210,6 +212,30 @@ public class JdbcPaymentStore implements PaymentStore {
     List<PaymentRecord> rows =
         jdbcTemplate.query(FIND_BY_ID, (resultSet, rowNumber) -> mapRecord(resultSet), paymentId);
     return rows.stream().findFirst();
+  }
+
+  @Override
+  public Map<UUID, PaymentState> statesFor(Collection<UUID> paymentIds) {
+    if (paymentIds == null || paymentIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<UUID, PaymentState> states = new LinkedHashMap<>();
+    List<UUID> ids = List.copyOf(paymentIds);
+    int pageSize = 500;
+    for (int start = 0; start < ids.size(); start += pageSize) {
+      List<UUID> page = ids.subList(start, Math.min(start + pageSize, ids.size()));
+      String placeholders = String.join(",", Collections.nCopies(page.size(), "?"));
+      List<Map.Entry<UUID, PaymentState>> rows =
+          jdbcTemplate.query(
+              "SELECT id, state FROM payment_requests WHERE id IN (" + placeholders + ")",
+              (resultSet, rowNumber) ->
+                  Map.entry(
+                      resultSet.getObject("id", UUID.class),
+                      PaymentState.valueOf(resultSet.getString("state"))),
+              page.toArray());
+      rows.forEach(entry -> states.put(entry.getKey(), entry.getValue()));
+    }
+    return Map.copyOf(states);
   }
 
   @Override

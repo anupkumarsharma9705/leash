@@ -233,6 +233,44 @@ class PaymentReconcilerIntegrationTest {
   }
 
   @Test
+  void countsATransientRetryAsAFailureAndBacksOffBeforeTryingAgain() throws Exception {
+    CreatedAgent agent = newAgent();
+    paypal.failNextSubmission(new PayPalPayoutException("Simulated crash", null, null));
+    UUID paymentId = submitPayment(agent, "invoice-backoff", 1_200);
+    assertThat(paymentState(paymentId)).isEqualTo("APPROVED");
+    assertThat(paypal.submissionAttempts()).isEqualTo(1);
+
+    paypal.failNextSubmission(
+        new PayPalPayoutException("PayPal is still unavailable", 503, "debug-backoff"));
+    clock.advance(Duration.ofSeconds(61));
+
+    ReconciliationSummary summary = reconciler.reconcileOnce();
+
+    // The gateway swallowed the transient failure and returned APPROVED. That is an attempt, but
+    // not a repair.
+    assertThat(summary.approvedRetried()).isZero();
+    assertThat(summary.failures()).isEqualTo(1);
+    assertThat(paymentState(paymentId)).isEqualTo("APPROVED");
+    assertThat(paypal.submissionAttempts()).isEqualTo(2);
+
+    paypal.clearFailure();
+    clock.advance(Duration.ofSeconds(10));
+    summary = reconciler.reconcileOnce();
+
+    // Inside the 30s backoff window: no PayPal call, no work, no false success.
+    assertThat(summary.approvedRetried()).isZero();
+    assertThat(summary.failures()).isZero();
+    assertThat(paypal.submissionAttempts()).isEqualTo(2);
+
+    clock.advance(Duration.ofSeconds(20));
+    summary = reconciler.reconcileOnce();
+
+    assertThat(summary.approvedRetried()).isEqualTo(1);
+    assertThat(paymentState(paymentId)).isEqualTo("SUBMITTED");
+    assertThat(paypal.submissionAttempts()).isEqualTo(3);
+  }
+
+  @Test
   void theScheduledEntryPointRespectsTheDisabledFlag() throws Exception {
     CreatedAgent agent = newAgent();
     paypal.failNextSubmission(new PayPalPayoutException("Simulated crash", null, null));

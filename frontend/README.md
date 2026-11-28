@@ -11,8 +11,8 @@ API at `/api/v1/admin/**`.
 
    ```powershell
    $env:SPRING_PROFILES_ACTIVE = 'local'
-   $env:ADMIN_USERNAME = 'admin'
-   $env:ADMIN_PASSWORD_HASH = '<bcrypt hash>'
+   $env:LEASH_ADMIN_USERNAME = 'admin'
+   $env:LEASH_ADMIN_PASSWORD_HASH = '<bcrypt hash>'
    cd backend
    .\mvnw.cmd spring-boot:run
    ```

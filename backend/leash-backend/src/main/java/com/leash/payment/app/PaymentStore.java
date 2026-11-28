@@ -7,6 +7,7 @@ import com.leash.payment.domain.PaymentRecord;
 import com.leash.payment.domain.PaymentState;
 import com.leash.payment.domain.PendingApproval;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +21,9 @@ public interface PaymentStore {
   Optional<PaymentRecord> findByAgentAndIdempotencyKey(UUID agentId, String idempotencyKey);
 
   Optional<PaymentRecord> findById(UUID paymentId);
+
+  /** Returns the current state of each known payment, omitting ids that no longer exist. */
+  Map<UUID, PaymentState> statesFor(Collection<UUID> paymentIds);
 
   /**
    * Returns one page of payments matching the filter, newest first, joined with the owning agent's

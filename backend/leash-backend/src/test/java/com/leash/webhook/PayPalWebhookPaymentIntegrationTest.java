@@ -24,6 +24,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -285,6 +289,47 @@ class PayPalWebhookPaymentIntegrationTest {
     assertThat(paymentState(paymentId)).isEqualTo("SUCCEEDED");
     assertThat(processedAt("WH-RACE")).isNotNull();
     assertThat(webhookStatusEvents(paymentId)).hasSize(1);
+  }
+
+  @Test
+  void concurrentDeliveriesOfTheSameEventApplyItOnlyOnce() throws Exception {
+    CreatedAgent agent = newAgent();
+    UUID paymentId = createSubmittedPayment(agent, "invoice-webhook-concurrent");
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<Integer> first =
+          executor.submit(() ->
+              postItemWebhook(
+                      "WH-CONCURRENT",
+                      "PAYMENT.PAYOUTS-ITEM.SUCCEEDED",
+                      paymentId,
+                      "fake-batch-1",
+                      "SUCCESS")
+                  .andReturn()
+                  .getResponse()
+                  .getStatus());
+      Future<Integer> second =
+          executor.submit(() ->
+              postItemWebhook(
+                      "WH-CONCURRENT",
+                      "PAYMENT.PAYOUTS-ITEM.SUCCEEDED",
+                      paymentId,
+                      "fake-batch-1",
+                      "SUCCESS")
+                  .andReturn()
+                  .getResponse()
+                  .getStatus());
+
+      assertThat(first.get(15, TimeUnit.SECONDS)).isEqualTo(200);
+      assertThat(second.get(15, TimeUnit.SECONDS)).isEqualTo(200);
+    } finally {
+      executor.shutdownNow();
+    }
+
+    assertThat(paymentState(paymentId)).isEqualTo("SUCCEEDED");
+    assertThat(webhookStatusEvents(paymentId)).hasSize(1);
+    assertThat(processedAt("WH-CONCURRENT")).isNotNull();
   }
 
   private CreatedAgent newAgent() {

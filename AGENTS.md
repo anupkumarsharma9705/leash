@@ -530,7 +530,7 @@ Profiles: `local`, `demo`, `test`. Fail-fast validated `@ConfigurationProperties
 |---|---|
 | PayPal | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `PAYPAL_WEBHOOK_ID`, `LEASH_ALLOW_LIVE` |
 | Database | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (JDBC URL composed in config, never the `postgres://` form) |
-| Admin | `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (BCrypt only) |
+| Admin | `LEASH_ADMIN_USERNAME`, `LEASH_ADMIN_PASSWORD_HASH` (BCrypt only; legacy `ADMIN_*` still binds), `LEASH_ADMIN_RATE_LIMIT_ENABLED` |
 | LLM | `LEASH_LLM_BASE_URL`, `LEASH_LLM_API_KEY`, `LEASH_LLM_MODEL` |
 | App | `PORT`, `SPRING_PROFILES_ACTIVE`, `LEASH_MAX_PAYMENT_MINOR` |
 

@@ -7,7 +7,7 @@ Status on **2026-11-12**. Deadline: **18:00 IST**. Frozen after submission.
 | 1 | Public repository with MIT license visible in About | **Owner action** | `LICENSE` is present; the owner must create the public GitHub repo, push, and set the copyright holder. |
 | 2 | Public YouTube video under 3 minutes | **Owner action** | Script and shot list: [`demo-script.md`](demo-script.md). The title, description, and honesty wording are in [`submission-description.md`](submission-description.md). The video must show the working console. |
 | 3 | Hosted demo URL or complete run-from-source instructions | **Run-from-source done; hosted blocked** | [`../README.md`](../README.md) §4. The multi-stage image builds and passed a local container smoke test; `render.yaml` is ready. No Render account/URL. |
-| 4 | Description names PayPal and the AI model; Built With filled | **Copy ready; owner action** | Use [`submission-description.md`](submission-description.md). Name **PayPal Payouts (sandbox)**. This build calls **no LLM**; the agent is SCRIPTED. Do not claim a model that is not wired. |
+| 4 | Description names PayPal and the AI model; Built With filled | **Copy ready; owner action** | Use [`submission-description.md`](submission-description.md). Name **PayPal Payouts (sandbox)** and the build model **DeepSeek V4.1 Flash via OpenCode**. Runtime LLM mode is implemented but needs a configured key; the recorded demo is SCRIPTED. |
 | 5 | Sponsor tools ticked | **Owner action** | Tick **AG Grid Community**. Tick **Render** only if the blueprint is actually deployed. |
 | 6 | Real sandbox payout and verified webhook shown | **Blocked** | Needs `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, a funded sandbox recipient, and `PAYPAL_WEBHOOK_ID`. WireMock tests are not a substitute. Run [`gate-g1-runbook.md`](gate-g1-runbook.md) before recording. |
 | 7 | No API keys committed; secret scan clean | **Done locally** | `.env` is ignored, `.env.example` has placeholders only, and the working-tree scan is clean. `.gstack/` is now fully ignored; it contains a local terminal token. Re-run before the first push; rotate on any hit. |
@@ -16,7 +16,8 @@ Status on **2026-11-12**. Deadline: **18:00 IST**. Frozen after submission.
 
 ## What is verified
 
-- Backend: **364 tests**, 0 failures, 0 errors, 0 skipped; Spotless clean; policy coverage 97.5%.
+- Backend: **383 tests**, 0 failures, 0 errors, 0 skipped; 211 Java files Spotless-clean; policy
+  coverage **97.5%** (115/118).
 - Frontend: TypeScript strict build and lint clean.
 - Live browser: sign-in, ledger, filters, timeline, approval confirmation and approval, policy save,
   suspend/resume, demo nav, LLM gating, and a scripted run whose repeat replays all three payments.
@@ -30,6 +31,8 @@ Status on **2026-11-12**. Deadline: **18:00 IST**. Frozen after submission.
 - A real PayPal sandbox payout (Gate G1).
 - A live PayPal webhook (Gate G4 / Slice 1.6).
 - A Render deployment.
-- LLM tool calling (Slice 2.9); the route fails closed with `501 LLM_NOT_CONFIGURED`.
+- A live LLM run. LLM tool calling is implemented behind `AgentModelClient`; with no
+  `LEASH_LLM_*` values the route fails closed with `501 LLM_NOT_CONFIGURED`, and the recorded demo is
+  `SCRIPTED`.
 
 These are stated in the README and video script. Do not present them as working.

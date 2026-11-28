@@ -2,6 +2,7 @@ package com.leash.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -218,6 +219,28 @@ class AgentApiKeyIntegrationTest {
             get("/api/v1/admin/agents")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + created.apiKey()))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void actuatorMetricsRequireTheAdminCredential() throws Exception {
+    CreatedAgent created = createAgent();
+
+    mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get("/actuator/prometheus")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + created.apiKey()))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get("/actuator/metrics/jvm.memory.used")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + created.apiKey()))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get("/actuator/metrics/jvm.memory.used")
+                .with(httpBasic("admin", "admin-test-password")))
+        .andExpect(status().isOk());
   }
 
   @Test

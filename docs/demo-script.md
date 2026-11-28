@@ -91,7 +91,9 @@ Show the budget bar (spent + reserved vs the weekly limit).
 > AG Grid operator console. The next step is more rails and multi-agent controls."
 
 Name the sponsor tools you actually used: PayPal Payouts sandbox, AG Grid Community, and Render if
-the deployment is live. Do not claim an LLM run: this build is SCRIPTED.
+the deployment is live. The recorded demo uses `SCRIPTED`. LLM mode is implemented and runs when
+`LEASH_LLM_BASE_URL`, `LEASH_LLM_API_KEY`, and `LEASH_LLM_MODEL` are set; do not claim a live model
+run unless you recorded one in that configuration.
 
 ## Recording checklist
 
